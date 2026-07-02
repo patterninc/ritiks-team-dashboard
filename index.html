@@ -1235,18 +1235,13 @@ function renderBrands(tasks){
   }).join('')||'<div class="empty-state">No items in review queue 🎉</div>';
 }
 
-// ── Task Flow Chart — Drill-Down (Monthly → Weekly → Daily) ──────────────────
+// ── Task Flow Chart — Drill-Down (Monthly → Daily) ────────────────────────────
 let flowChart=null;
-let _flowLevel='monthly';   // 'monthly' | 'weekly' | 'daily'
-let _flowSelMonth=null;     // '2026-04'
-let _flowSelWeek=null;      // '2026-04-07' (Monday of week)
+let _flowLevel='monthly';  // 'monthly' | 'daily'
+let _flowSelMonth=null;    // '2026-06'
 const _MN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-const _DN=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
-function _weekMon(ds){const d=new Date(ds+'T00:00:00');const dow=d.getDay();d.setDate(d.getDate()-(dow===0?6:dow-1));return d.toISOString().slice(0,10);}
-function flowDrillUp(){if(_flowLevel==='daily'){_flowLevel='weekly';_flowSelWeek=null;}else if(_flowLevel==='weekly'){_flowLevel='monthly';_flowSelMonth=null;}renderFlowChart();}
-function flowGoMonthly(){_flowLevel='monthly';_flowSelMonth=null;_flowSelWeek=null;renderFlowChart();}
-function flowGoWeekly(){_flowLevel='weekly';_flowSelWeek=null;renderFlowChart();}
+function flowDrillUp(){_flowLevel='monthly';_flowSelMonth=null;renderFlowChart();}
 
 function renderFlowChart(){
   const allBoard=window._allBoardTasks;
@@ -1268,35 +1263,32 @@ function renderFlowChart(){
       labels.push(_MN[d.getMonth()]+' '+d.getFullYear());
       d.setMonth(d.getMonth()+1);
     }
-  } else if(_flowLevel==='weekly'){
-    const [y,m]=_flowSelMonth.split('-').map(Number);
-    const monthStart=new Date(y,m-1,1);
-    const monthEnd=new Date(y,m,0);
-    let ws=new Date(monthStart);
-    const dow=ws.getDay();ws.setDate(ws.getDate()-(dow===0?6:dow-1));
-    while(ws<=monthEnd){
-      buckets.push(ws.toISOString().slice(0,10));
-      const we=new Date(ws);we.setDate(we.getDate()+6);
-      const labelDay=(ws.getMonth()+1===m)?ws:monthStart;
-      labels.push(_MN[labelDay.getMonth()]+' '+labelDay.getDate());
-      ws.setDate(ws.getDate()+7);
-    }
   } else {
-    for(let i=0;i<7;i++){
-      const d=new Date(_flowSelWeek+'T00:00:00');d.setDate(d.getDate()+i);
+    // Daily — all days of selected month, capped at today
+    // If selected month is current month, show last 30 days instead
+    const [y,m]=_flowSelMonth.split('-').map(Number);
+    const curYear=new Date(today+'T00:00:00').getFullYear();
+    const curMonth=new Date(today+'T00:00:00').getMonth()+1;
+    let startD, endD;
+    if(y===curYear&&m===curMonth){
+      // Last 30 days
+      startD=new Date(today+'T00:00:00');startD.setDate(startD.getDate()-29);
+      endD=new Date(today+'T00:00:00');
+    } else {
+      startD=new Date(y,m-1,1);
+      endD=new Date(y,m,0); // last day of month
+    }
+    let d=new Date(startD);
+    while(d<=endD){
       buckets.push(d.toISOString().slice(0,10));
-      labels.push(_DN[d.getDay()]+', '+_MN[d.getMonth()]+' '+d.getDate());
+      labels.push(_MN[d.getMonth()]+' '+d.getDate());
+      d.setDate(d.getDate()+1);
     }
   }
 
   const intakeMap={},compMap={};
   for(const b of buckets){intakeMap[b]=0;compMap[b]=0;}
-  function getKey(ds){
-    if(!ds)return null;
-    if(_flowLevel==='monthly')return ds.slice(0,7);
-    if(_flowLevel==='daily')return ds.slice(0,10);
-    return _weekMon(ds);
-  }
+  function getKey(ds){if(!ds)return null;return _flowLevel==='monthly'?ds.slice(0,7):ds.slice(0,10);}
   for(const t of allBoard){
     if(t.created_at){const k=getKey(t.created_at.slice(0,10));if(k&&intakeMap[k]!==undefined)intakeMap[k]++;}
     if(t.completed&&t.completed_at){const k=getKey(t.completed_at.slice(0,10));if(k&&compMap[k]!==undefined)compMap[k]++;}
@@ -1304,7 +1296,7 @@ function renderFlowChart(){
 
   const intakeData=buckets.map(b=>intakeMap[b]);
   const compData=buckets.map(b=>compMap[b]);
-  const canDrill=_flowLevel!=='daily';
+  const canDrill=_flowLevel==='monthly';
 
   // Breadcrumb
   const bcEl=document.getElementById('flow-breadcrumb');
@@ -1312,13 +1304,12 @@ function renderFlowChart(){
   if(bcEl){
     if(_flowLevel==='monthly'){
       bcEl.textContent='All Months';
-    } else if(_flowLevel==='weekly'){
-      const [y,m]=_flowSelMonth.split('-').map(Number);
-      bcEl.innerHTML='<span style="cursor:pointer;color:#60A5FA;text-decoration:underline" onclick="flowGoMonthly()">All Months</span> › '+_MN[m-1]+' '+y;
     } else {
       const [y,m]=_flowSelMonth.split('-').map(Number);
-      const wd=new Date(_flowSelWeek+'T00:00:00');
-      bcEl.innerHTML='<span style="cursor:pointer;color:#60A5FA;text-decoration:underline" onclick="flowGoMonthly()">All Months</span> › <span style="cursor:pointer;color:#60A5FA;text-decoration:underline" onclick="flowGoWeekly()">'+_MN[m-1]+' '+y+'</span> › Week of '+_MN[wd.getMonth()]+' '+wd.getDate();
+      const curYear=new Date(today+'T00:00:00').getFullYear();
+      const curMonth=new Date(today+'T00:00:00').getMonth()+1;
+      const label=(y===curYear&&m===curMonth)?'Last 30 days':_MN[m-1]+' '+y;
+      bcEl.innerHTML='<span style="cursor:pointer;color:#60A5FA;text-decoration:underline" onclick="flowDrillUp()">All Months</span> › '+label;
     }
   }
   if(backEl)backEl.style.display=_flowLevel==='monthly'?'none':'inline-block';
@@ -1326,7 +1317,7 @@ function renderFlowChart(){
   const totalIn=intakeData.reduce((a,b)=>a+b,0);
   const totalCo=compData.reduce((a,b)=>a+b,0);
   const noteEl=document.getElementById('flow-note');
-  if(noteEl)noteEl.textContent=totalIn.toLocaleString()+' in · '+totalCo.toLocaleString()+' done'+(canDrill?' · click to drill down':'');
+  if(noteEl)noteEl.textContent=totalIn.toLocaleString()+' in · '+totalCo.toLocaleString()+' done'+(canDrill?' · click month to see daily':'');
 
   if(flowChart)flowChart.destroy();
   const ctx=document.getElementById('flowChart').getContext('2d');
@@ -1342,18 +1333,17 @@ function renderFlowChart(){
       onClick:(evt,elements)=>{
         if(!canDrill||!elements.length)return;
         const idx=elements[0].index;
-        if(_flowLevel==='monthly'){_flowSelMonth=buckets[idx];_flowLevel='weekly';renderFlowChart();}
-        else if(_flowLevel==='weekly'){_flowSelWeek=buckets[idx];_flowLevel='daily';renderFlowChart();}
+        _flowSelMonth=buckets[idx];_flowLevel='daily';renderFlowChart();
       },
       onHover:(evt,elements)=>{if(canDrill)evt.native.target.style.cursor=elements.length?'pointer':'default';},
       plugins:{
         legend:{display:true,position:'top',labels:{font:{size:11},boxWidth:12,padding:14,color:'#9CA3AF'}},
         tooltip:{backgroundColor:'#111827',borderColor:'#1E2A3A',borderWidth:1,titleColor:'#F9FAFB',bodyColor:'#9CA3AF',padding:10,
-          callbacks:{footer:canDrill?()=>['↓ Click to drill down']:undefined}
+          callbacks:{footer:canDrill?()=>['↓ Click to see daily breakdown']:undefined}
         }
       },
       scales:{
-        x:{grid:{color:'#1E2A3A22'},ticks:{font:{size:10},color:'#6B7280',maxRotation:_flowLevel==='daily'?20:0}},
+        x:{grid:{color:'#1E2A3A22'},ticks:{font:{size:10},color:'#6B7280',maxRotation:_flowLevel==='daily'?35:0,maxTicksLimit:_flowLevel==='daily'?16:12}},
         y:{grid:{color:'#1E2A3A'},ticks:{font:{size:10},color:'#6B7280'},beginAtZero:true}
       }
     }
