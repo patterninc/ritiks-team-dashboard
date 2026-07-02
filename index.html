@@ -376,11 +376,10 @@ tbody td{padding:8px 13px;font-size:12px;}
   <div class="panel" id="flow-chart-panel" style="margin-bottom:14px;">
     <div class="ph" style="flex-wrap:wrap;gap:6px;">
       <div class="ph-title">📈 Task Flow — Intake vs Completions</div>
-      <div style="display:flex;align-items:center;gap:5px;margin-left:auto;">
-        <span id="flow-note" style="font-size:10px;color:#6B7280;white-space:nowrap;">Apr 2026 → today</span>
-        <button class="t-period-btn active" id="fp-daily" onclick="setFlowPeriod('daily')" style="padding:4px 10px;font-size:11px;">Daily</button>
-        <button class="t-period-btn" id="fp-weekly" onclick="setFlowPeriod('weekly')" style="padding:4px 10px;font-size:11px;">Weekly</button>
-        <button class="t-period-btn" id="fp-monthly" onclick="setFlowPeriod('monthly')" style="padding:4px 10px;font-size:11px;">Monthly</button>
+      <div style="display:flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:wrap;">
+        <span id="flow-breadcrumb" style="font-size:11px;color:#9CA3AF;"></span>
+        <button id="flow-back-btn" onclick="flowDrillUp()" style="display:none;font-size:11px;padding:4px 10px;background:#1E2A3A;border:1px solid #2563EB;color:#60A5FA;border-radius:6px;cursor:pointer;font-weight:600;">← Back</button>
+        <span id="flow-note" style="font-size:10px;color:#6B7280;"></span>
       </div>
     </div>
     <div id="flow-loading" style="padding:28px;text-align:center;color:#6B7280;font-size:12px;display:flex;align-items:center;justify-content:center;gap:8px;">
@@ -1236,123 +1235,129 @@ function renderBrands(tasks){
   }).join('')||'<div class="empty-state">No items in review queue 🎉</div>';
 }
 
-// ── Task Flow Chart ──────────────────────────────────────────────────────────
-let flowChart=null, _flowPeriod='daily';
+// ── Task Flow Chart — Drill-Down (Monthly → Weekly → Daily) ──────────────────
+let flowChart=null;
+let _flowLevel='monthly';   // 'monthly' | 'weekly' | 'daily'
+let _flowSelMonth=null;     // '2026-04'
+let _flowSelWeek=null;      // '2026-04-07' (Monday of week)
+const _MN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const _DN=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
-function setFlowPeriod(period){
-  _flowPeriod=period;
-  ['daily','weekly','monthly'].forEach(p=>{
-    const btn=document.getElementById('fp-'+p);
-    if(btn)btn.classList.toggle('active',p===period);
-  });
-  renderFlowChart();
-}
+function _weekMon(ds){const d=new Date(ds+'T00:00:00');const dow=d.getDay();d.setDate(d.getDate()-(dow===0?6:dow-1));return d.toISOString().slice(0,10);}
+function flowDrillUp(){if(_flowLevel==='daily'){_flowLevel='weekly';_flowSelWeek=null;}else if(_flowLevel==='weekly'){_flowLevel='monthly';_flowSelMonth=null;}renderFlowChart();}
+function flowGoMonthly(){_flowLevel='monthly';_flowSelMonth=null;_flowSelWeek=null;renderFlowChart();}
+function flowGoWeekly(){_flowLevel='weekly';_flowSelWeek=null;renderFlowChart();}
 
 function renderFlowChart(){
   const allBoard=window._allBoardTasks;
   const loadEl=document.getElementById('flow-loading');
   const wrapEl=document.getElementById('flow-chart-wrap');
-  if(!allBoard||!allBoard.length){
-    if(loadEl)loadEl.style.display='flex';
-    if(wrapEl)wrapEl.style.display='none';
-    return;
-  }
+  if(!allBoard||!allBoard.length){if(loadEl)loadEl.style.display='flex';if(wrapEl)wrapEl.style.display='none';return;}
   if(loadEl)loadEl.style.display='none';
   if(wrapEl)wrapEl.style.display='block';
 
-  const START='2026-04-01';
   const today=todayStr();
-  const MONTH_NAMES=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  let buckets=[],labels=[];
 
-  function getWeekMonday(dateStr){
-    const d=new Date(dateStr+'T00:00:00');
-    const dow=d.getDay(); // 0=Sun
-    d.setDate(d.getDate()-(dow===0?6:dow-1));
-    return d.toISOString().slice(0,10);
-  }
-
-  function getBuckets(){
-    const buckets=[];
-    if(_flowPeriod==='daily'){
-      let d=new Date(START+'T00:00:00');
-      const end=new Date(today+'T00:00:00');
-      while(d<=end){buckets.push(d.toISOString().slice(0,10));d.setDate(d.getDate()+1);}
-    } else if(_flowPeriod==='weekly'){
-      let d=new Date(getWeekMonday(START)+'T00:00:00');
-      const end=new Date(today+'T00:00:00');
-      while(d<=end){buckets.push(d.toISOString().slice(0,10));d.setDate(d.getDate()+7);}
-    } else {
-      let d=new Date(2026,3,1); // April 2026
-      const todayD=new Date(today+'T00:00:00');
-      const endM=new Date(todayD.getFullYear(),todayD.getMonth(),1);
-      while(d<=endM){buckets.push(d.getFullYear()+'-'+(d.getMonth()+1).toString().padStart(2,'0'));d.setMonth(d.getMonth()+1);}
+  if(_flowLevel==='monthly'){
+    let d=new Date(2026,3,1);
+    const td=new Date(today+'T00:00:00');
+    const endM=new Date(td.getFullYear(),td.getMonth(),1);
+    while(d<=endM){
+      buckets.push(d.getFullYear()+'-'+(d.getMonth()+1).toString().padStart(2,'0'));
+      labels.push(_MN[d.getMonth()]+' '+d.getFullYear());
+      d.setMonth(d.getMonth()+1);
     }
-    return buckets;
-  }
-
-  function getBucketKey(dateStr){
-    if(!dateStr||dateStr<START)return null;
-    if(_flowPeriod==='monthly')return dateStr.slice(0,7);
-    if(_flowPeriod==='weekly')return getWeekMonday(dateStr);
-    return dateStr.slice(0,10);
-  }
-
-  function formatLabel(key){
-    if(_flowPeriod==='monthly'){
-      const[y,m]=key.split('-');return MONTH_NAMES[parseInt(m)-1]+' '+y;
+  } else if(_flowLevel==='weekly'){
+    const [y,m]=_flowSelMonth.split('-').map(Number);
+    const monthStart=new Date(y,m-1,1);
+    const monthEnd=new Date(y,m,0);
+    let ws=new Date(monthStart);
+    const dow=ws.getDay();ws.setDate(ws.getDate()-(dow===0?6:dow-1));
+    while(ws<=monthEnd){
+      buckets.push(ws.toISOString().slice(0,10));
+      const we=new Date(ws);we.setDate(we.getDate()+6);
+      const labelDay=(ws.getMonth()+1===m)?ws:monthStart;
+      labels.push(_MN[labelDay.getMonth()]+' '+labelDay.getDate());
+      ws.setDate(ws.getDate()+7);
     }
-    const d=new Date(key+'T00:00:00');
-    return MONTH_NAMES[d.getMonth()]+' '+d.getDate();
+  } else {
+    for(let i=0;i<7;i++){
+      const d=new Date(_flowSelWeek+'T00:00:00');d.setDate(d.getDate()+i);
+      buckets.push(d.toISOString().slice(0,10));
+      labels.push(_DN[d.getDay()]+', '+_MN[d.getMonth()]+' '+d.getDate());
+    }
   }
 
-  const buckets=getBuckets();
   const intakeMap={},compMap={};
   for(const b of buckets){intakeMap[b]=0;compMap[b]=0;}
-
+  function getKey(ds){
+    if(!ds)return null;
+    if(_flowLevel==='monthly')return ds.slice(0,7);
+    if(_flowLevel==='daily')return ds.slice(0,10);
+    return _weekMon(ds);
+  }
   for(const t of allBoard){
-    if(t.created_at){
-      const ds=t.created_at.slice(0,10);
-      const k=getBucketKey(ds);
-      if(k&&intakeMap[k]!==undefined)intakeMap[k]++;
-    }
-    if(t.completed&&t.completed_at){
-      const ds=t.completed_at.slice(0,10);
-      const k=getBucketKey(ds);
-      if(k&&compMap[k]!==undefined)compMap[k]++;
-    }
+    if(t.created_at){const k=getKey(t.created_at.slice(0,10));if(k&&intakeMap[k]!==undefined)intakeMap[k]++;}
+    if(t.completed&&t.completed_at){const k=getKey(t.completed_at.slice(0,10));if(k&&compMap[k]!==undefined)compMap[k]++;}
   }
 
-  const labels=buckets.map(formatLabel);
   const intakeData=buckets.map(b=>intakeMap[b]);
   const compData=buckets.map(b=>compMap[b]);
-  const ptRadius=_flowPeriod==='daily'?0:3;
+  const canDrill=_flowLevel!=='daily';
+
+  // Breadcrumb
+  const bcEl=document.getElementById('flow-breadcrumb');
+  const backEl=document.getElementById('flow-back-btn');
+  if(bcEl){
+    if(_flowLevel==='monthly'){
+      bcEl.textContent='All Months';
+    } else if(_flowLevel==='weekly'){
+      const [y,m]=_flowSelMonth.split('-').map(Number);
+      bcEl.innerHTML='<span style="cursor:pointer;color:#60A5FA;text-decoration:underline" onclick="flowGoMonthly()">All Months</span> › '+_MN[m-1]+' '+y;
+    } else {
+      const [y,m]=_flowSelMonth.split('-').map(Number);
+      const wd=new Date(_flowSelWeek+'T00:00:00');
+      bcEl.innerHTML='<span style="cursor:pointer;color:#60A5FA;text-decoration:underline" onclick="flowGoMonthly()">All Months</span> › <span style="cursor:pointer;color:#60A5FA;text-decoration:underline" onclick="flowGoWeekly()">'+_MN[m-1]+' '+y+'</span> › Week of '+_MN[wd.getMonth()]+' '+wd.getDate();
+    }
+  }
+  if(backEl)backEl.style.display=_flowLevel==='monthly'?'none':'inline-block';
+
+  const totalIn=intakeData.reduce((a,b)=>a+b,0);
+  const totalCo=compData.reduce((a,b)=>a+b,0);
+  const noteEl=document.getElementById('flow-note');
+  if(noteEl)noteEl.textContent=totalIn.toLocaleString()+' in · '+totalCo.toLocaleString()+' done'+(canDrill?' · click to drill down':'');
 
   if(flowChart)flowChart.destroy();
   const ctx=document.getElementById('flowChart').getContext('2d');
   flowChart=new Chart(ctx,{
     type:'line',
     data:{labels,datasets:[
-      {label:'Intake (tasks created)',data:intakeData,borderColor:'#2563EB',backgroundColor:'rgba(37,99,235,0.12)',borderWidth:2,pointRadius:ptRadius,pointHoverRadius:5,fill:true,tension:0.35},
-      {label:'Completions',data:compData,borderColor:'#10b981',backgroundColor:'rgba(16,185,129,0.12)',borderWidth:2,pointRadius:ptRadius,pointHoverRadius:5,fill:true,tension:0.35}
+      {label:'Intake (tasks created)',data:intakeData,borderColor:'#2563EB',backgroundColor:'rgba(37,99,235,0.12)',borderWidth:2.5,pointRadius:4,pointHoverRadius:7,fill:true,tension:0.3},
+      {label:'Completions',data:compData,borderColor:'#10b981',backgroundColor:'rgba(16,185,129,0.12)',borderWidth:2.5,pointRadius:4,pointHoverRadius:7,fill:true,tension:0.3}
     ]},
     options:{
       responsive:true,maintainAspectRatio:false,
       interaction:{mode:'index',intersect:false},
+      onClick:(evt,elements)=>{
+        if(!canDrill||!elements.length)return;
+        const idx=elements[0].index;
+        if(_flowLevel==='monthly'){_flowSelMonth=buckets[idx];_flowLevel='weekly';renderFlowChart();}
+        else if(_flowLevel==='weekly'){_flowSelWeek=buckets[idx];_flowLevel='daily';renderFlowChart();}
+      },
+      onHover:(evt,elements)=>{if(canDrill)evt.native.target.style.cursor=elements.length?'pointer':'default';},
       plugins:{
         legend:{display:true,position:'top',labels:{font:{size:11},boxWidth:12,padding:14,color:'#9CA3AF'}},
-        tooltip:{backgroundColor:'#111827',borderColor:'#1E2A3A',borderWidth:1,titleColor:'#F9FAFB',bodyColor:'#9CA3AF',padding:10}
+        tooltip:{backgroundColor:'#111827',borderColor:'#1E2A3A',borderWidth:1,titleColor:'#F9FAFB',bodyColor:'#9CA3AF',padding:10,
+          callbacks:{footer:canDrill?()=>['↓ Click to drill down']:undefined}
+        }
       },
       scales:{
-        x:{grid:{color:'#1E2A3A22'},ticks:{font:{size:10},color:'#6B7280',maxTicksLimit:_flowPeriod==='daily'?18:_flowPeriod==='weekly'?14:12,maxRotation:40}},
+        x:{grid:{color:'#1E2A3A22'},ticks:{font:{size:10},color:'#6B7280',maxRotation:_flowLevel==='daily'?20:0}},
         y:{grid:{color:'#1E2A3A'},ticks:{font:{size:10},color:'#6B7280'},beginAtZero:true}
       }
     }
   });
-
-  const totalIn=intakeData.reduce((a,b)=>a+b,0);
-  const totalCo=compData.reduce((a,b)=>a+b,0);
-  const noteEl=document.getElementById('flow-note');
-  if(noteEl)noteEl.textContent=`Apr 2026 → today · ${totalIn.toLocaleString()} created · ${totalCo.toLocaleString()} completed`;
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
