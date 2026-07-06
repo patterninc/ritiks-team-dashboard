@@ -88,6 +88,7 @@ select:hover,.srch:hover{border-color:#2563EB;}
 .mc:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,.08);}
 .mc.sme::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:#f59e0b;}
 .mc.member::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:#2563EB;}
+.mc.lead::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:#a855f7;}
 .mc.dimmed{opacity:.5;}
 .mc-head{display:flex;align-items:center;gap:9px;margin-bottom:11px;}
 .av{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:white;flex-shrink:0;}
@@ -95,7 +96,7 @@ select:hover,.srch:hover{border-color:#2563EB;}
 .role-chip{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:2px 6px;border-radius:4px;display:inline-block;margin-top:2px;}
 .chip-sme{background:#1C1500;color:#F59E0B;}
 .chip-mem{background:#0f1f3d;color:#60A5FA;}
-.chip-lead{background:#1e0a3c;color:#c084fc;}
+.chip-lead{background:#3b0764;color:#a855f7;}
 .metrics4{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-bottom:9px;}
 .met{border-radius:7px;padding:6px 3px;text-align:center;}
 .met-num{font-size:17px;font-weight:900;line-height:1;}
@@ -123,6 +124,7 @@ tbody tr:hover{background:#0D1117;}
 tbody tr:last-child{border-bottom:none;}
 tbody td{padding:8px 13px;font-size:12px;}
 .trow-sme td:first-child{border-left:3px solid #f59e0b;}
+.trow-lead td:first-child{border-left:3px solid #a855f7;}
 .trow-mem td:first-child{border-left:3px solid transparent;}
 .tname{display:flex;align-items:center;gap:7px;font-weight:600;}
 .tav{width:24px;height:24px;border-radius:50%;font-size:9px;font-weight:800;color:white;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
@@ -907,6 +909,11 @@ const MEMBERS=['Alind Dash','Jayashree Joshi','Divij Singh','Azima Keshvani','Ga
 const SMES=['Aachal Gaikwad','Kajal Mittal'];
 const LEADS=['Ritik Agiwal'];
 const ALL_MEMBERS=[...MEMBERS,...SMES,...LEADS];
+function memberRole(name){
+  if(LEADS.includes(name))return{chip:'chip-lead',label:'Lead',card:'lead',row:'trow-lead'};
+  if(SMES.includes(name))return{chip:'chip-sme',label:'SME',card:'sme',row:'trow-sme'};
+  return{chip:'chip-mem',label:'Member',card:'member',row:'trow-mem'};
+}
 const TEAM_SET=new Set(ALL_MEMBERS);
 
 const SEC_COLORS={'New Projects':'#2563EB','Waiting for Core Team':'#f59e0b','Stranded Inventory':'#ef4444','Assigned':'#8b5cf6','In Progress':'#10b981','Waiting for SEM/EPM':'#f97316','Needs Review from SEM/EPM':'#ec4899','Account Health Approval (Waiting)':'#eab308','Account Health Approval':'#eab308','Case Submitted':'#06b6d4','Cases Escalation':'#dc2626','Need to Check':'#a855f7','On Hold':'#6b7280','Team Work - Collaboration Tasks':'#14b8a6','Syndication Issue - On Hold':'#fb923c','Recurring Tasks':'#64748b','Complete':'#22c55e'};
@@ -1144,9 +1151,10 @@ function renderMembers(){
       const totalLbl=sel?'Assigned':'Total';
       const overdLbl=sel?'Past Due':'Overdue';
       const isDimmed=sel?(loaded&&m.totalM===0):m.total===0;
-      const roleChipCls=m.isLead?'chip-lead':m.isSme?'chip-sme':'chip-mem';
-      const roleLabel=m.isLead?'Lead':m.isSme?'SME':'Member';
-      const cardCls=m.isLead?'sme':m.isSme?'sme':'member'; // leads get same card border as SMEs
+      const role=memberRole(m.name);
+      const roleChipCls=role.chip;
+      const roleLabel=role.label;
+      const cardCls=role.card;
       return`<div class="mc ${cardCls}${isDimmed?' dimmed':''}" onclick="openMemberTasksModal('${esc(m.name)}')" style="cursor:pointer;" title="Click to view all tasks">
         <div class="mc-head"><div class="av" style="background:${color}">${inits(m.name)}</div><div style="flex:1;min-width:0"><div class="mc-name" title="${esc(m.name)}">${esc(m.name)}</div><span class="role-chip ${roleChipCls}">${roleLabel}</span></div><span style="font-size:10px;color:#c0c9d4;margin-left:auto" title="Click to view tasks">↗</span></div>
         <div class="metrics4" style="grid-template-columns:repeat(3,1fr)">
@@ -1179,8 +1187,9 @@ function renderMembers(){
       const tDisp=sel?(bl?m.totalM:'…'):(m.totalAll??m.total);
       const oDisp=sel?(bl?m.overdueM:'…'):m.overdue;
       const cDisp=sel?(bl?m.completedM:'…'):(m.completedAll??'…');
-      const tRowCls=m.isLead?'trow-sme':m.isSme?'trow-sme':'trow-mem';
-      const tBadge=m.isLead?'<span style="font-size:9px;background:#1e0a3c;color:#c084fc;padding:1px 5px;border-radius:3px;font-weight:700;margin-left:4px">LEAD</span>':m.isSme?'<span style="font-size:9px;background:#1C1500;color:#F59E0B;padding:1px 5px;border-radius:3px;font-weight:700;margin-left:4px">SME</span>':'';
+      const tRole=memberRole(m.name);
+      const tRowCls=tRole.row;
+      const tBadge=tRole.label!=='Member'?`<span class="role-chip ${tRole.chip}" style="margin-left:4px">${tRole.label}</span>`:'';
       return`<tr class="${tRowCls}">
         <td><div class="tname"><div class="tav" style="background:${color}">${inits(m.name)}</div>${esc(m.name)}${tBadge}</div></td>
         <td><span class="num-tot">${tDisp}</span></td>
@@ -1270,8 +1279,8 @@ async function loadCompleted(period){
 
     // Table
     document.getElementById('compTableBody').innerHTML=sorted.map(([name,cnt])=>{
-      const color=avColor(name);const isSme=SMES.includes(name);
-      return`<tr><td><div class="tname"><div class="tav" style="background:${color}">${inits(name)}</div>${esc(name)}</div></td><td><span class="num-done">${cnt}</span></td><td><span class="role-chip ${isSme?'chip-sme':'chip-mem'}">${isSme?'SME':'Member'}</span></td></tr>`;
+      const color=avColor(name);const role=memberRole(name);
+      return`<tr><td><div class="tname"><div class="tav" style="background:${color}">${inits(name)}</div>${esc(name)}</div></td><td><span class="num-done">${cnt}</span></td><td><span class="role-chip ${role.chip}">${role.label}</span></td></tr>`;
     }).join('')||'<tr><td colspan="3" style="padding:20px;text-align:center;color:#9ba8b8">No completed tasks found</td></tr>';
 
     document.getElementById('comp-loading').style.display='none';
@@ -1664,7 +1673,7 @@ function renderStatusTracking(tasks){
   // Render member cards
   document.getElementById('status-member-cards').innerHTML = memberList.map(m=>{
     const color=avColor(m.name);
-    const isSme=SMES.includes(m.name);
+    const role=memberRole(m.name);
     const allStatusKeys=[...STATUS_ORDER,...(m.byStatus['Unknown']?.length?['Unknown']:[])];
     const statusRows=allStatusKeys.filter(s=>m.byStatus[s]?.length>0).map(s=>{
       const items=m.byStatus[s];
@@ -1691,7 +1700,7 @@ function renderStatusTracking(tasks){
         <div class="av" style="background:${color};width:32px;height:32px;font-size:12px">${inits(m.name)}</div>
         <div style="flex:1;min-width:0">
           <div style="font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(m.name)}</div>
-          <span class="role-chip ${isSme?'chip-sme':'chip-mem'}">${isSme?'SME':'Member'}</span>
+          <span class="role-chip ${role.chip}">${role.label}</span>
         </div>
         <div style="text-align:right;flex-shrink:0">
           <div style="font-size:18px;font-weight:900;color:#2563EB;line-height:1">${m.total}</div>
@@ -1822,7 +1831,7 @@ function renderRecurring(){
 
   document.getElementById('rec-member-cards').innerHTML = memberList.map(m=>{
     const color=avColor(m.name);
-    const isSme=SMES.includes(m.name);
+    const role=memberRole(m.name);
     const overdueCount=m.tasks.filter(t=>t.due_on&&t.due_on<todayStr()).length;
     const todayCount=m.tasks.filter(t=>t.due_on&&t.due_on===todayStr()).length;
     const noDue=m.tasks.filter(t=>!t.due_on).length;
@@ -1847,7 +1856,7 @@ function renderRecurring(){
         <div class="av" style="background:${color};width:32px;height:32px;font-size:12px">${inits(m.name)}</div>
         <div style="flex:1;min-width:0">
           <div style="font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(m.name)}</div>
-          <span class="role-chip ${isSme?'chip-sme':'chip-mem'}">${isSme?'SME':'Member'}</span>
+          <span class="role-chip ${role.chip}">${role.label}</span>
         </div>
         <div style="text-align:right;flex-shrink:0">
           <div style="font-size:18px;font-weight:900;color:#8b5cf6;line-height:1">${m.tasks.length}</div>
@@ -1879,11 +1888,11 @@ function openRecurringModal(memberName, perMember){
   const m=perMember[memberName];
   if(!m||!m.tasks.length) return;
   const color=avColor(memberName);
-  const isSme=SMES.includes(memberName);
+  const role=memberRole(memberName);
   document.getElementById('modal-av').textContent=inits(memberName);
   document.getElementById('modal-av').style.background=color;
   document.getElementById('modal-name').textContent=memberName;
-  document.getElementById('modal-sub').textContent=`${m.tasks.length} recurring task${m.tasks.length!==1?'s':''} · ${isSme?'SME':'Member'}`;
+  document.getElementById('modal-sub').textContent=`${m.tasks.length} recurring task${m.tasks.length!==1?'s':''} · ${role.label}`;
 
   // Group by section
   const bySection={};
@@ -1946,12 +1955,12 @@ function openMemberTasksModal(memberName){
                              .sort((a,b)=>(b.completed_at||'').localeCompare(a.completed_at||''));
 
   const color = avColor(memberName);
-  const isSme = SMES.includes(memberName);
+  const role = memberRole(memberName);
   document.getElementById('modal-av').textContent = inits(memberName);
   document.getElementById('modal-av').style.background = color;
   document.getElementById('modal-name').textContent = memberName;
   document.getElementById('modal-sub').textContent =
-    `${overdue.length} overdue · ${active.length} active · ${completed.length} completed${!allBoard.length?' (loading…)':''} · ${isSme?'SME':'Member'}`;
+    `${overdue.length} overdue · ${active.length} active · ${completed.length} completed${!allBoard.length?' (loading…)':''} · ${role.label}`;
 
   function taskRowHtml(task, showCompletedDate=false){
     const sec = getSection(task);
@@ -2134,11 +2143,11 @@ function openStatusModal(memberName, memberStats){
   const m = memberStats[memberName];
   if(!m) return;
   const color = avColor(memberName);
-  const isSme = SMES.includes(memberName);
+  const role = memberRole(memberName);
   document.getElementById('modal-av').textContent = inits(memberName);
   document.getElementById('modal-av').style.background = color;
   document.getElementById('modal-name').textContent = memberName;
-  document.getElementById('modal-sub').textContent = `${m.total} task${m.total!==1?'s':''} · ${isSme?'SME':'Member'}`;
+  document.getElementById('modal-sub').textContent = `${m.total} task${m.total!==1?'s':''} · ${role.label}`;
 
   const threshold = parseInt(document.getElementById('stuck-threshold').value)||3;
   // Render ALL status groups (known + unknown + any extra like Recurring)
@@ -2280,12 +2289,13 @@ function renderTimingCards(members){
     const ontimePct=totalForBar?Math.round((m.ontime||0)/totalForBar*100):0;
     const latePct=totalForBar?Math.round((m.late||0)/totalForBar*100):0;
     const nodPct=totalForBar?Math.round((m.nodue||0)/totalForBar*100):0;
+    const role=memberRole(m.name);
     return `<div class="mtc" onclick="openCompletionModal('${esc(m.name)}',timingTaskRows)" style="cursor:pointer;" title="Click to see task links">
       <div class="mtc-head">
         <div class="av" style="background:${color}">${inits(m.name)}</div>
         <div style="flex:1;min-width:0">
           <div class="mc-name" title="${esc(m.name)}">${esc(m.name)}</div>
-          <span class="role-chip ${SMES.includes(m.name)?'chip-sme':'chip-mem'}">${SMES.includes(m.name)?'SME':'Member'}</span>
+          <span class="role-chip ${role.chip}">${role.label}</span>
         </div>
         <span class="perf-badge ${rating.cls}">${rating.label}</span>
       </div>
@@ -2322,8 +2332,10 @@ function renderTimingTable(members){
     const color=avColor(m.name);
     const rating=perfRating(m.ontime_pct,m.avgDays);
     const avgDueColor=m.avgDue===null?'#8b97a8':m.avgDue>0?'#10b981':'#ef4444';
-    return `<tr class="${SMES.includes(m.name)?'trow-sme':'trow-mem'}">
-      <td><div class="tname"><div class="tav" style="background:${color}">${inits(m.name)}</div>${esc(m.name)}${SMES.includes(m.name)?'<span style="font-size:9px;background:#1C1500;color:#F59E0B;padding:1px 5px;border-radius:3px;font-weight:700;margin-left:4px">SME</span>':''}</div></td>
+    const role=memberRole(m.name);
+    const roleBadge=role.label!=='Member'?`<span class="role-chip ${role.chip}" style="margin-left:4px">${role.label}</span>`:'';
+    return `<tr class="${role.row}">
+      <td><div class="tname"><div class="tav" style="background:${color}">${inits(m.name)}</div>${esc(m.name)}${roleBadge}</div></td>
       <td><span class="num-tot">${m.tasks}</span></td>
       <td><span style="font-weight:700;color:#2563EB">${m.avgDays!==null?m.avgDays.toFixed(1)+'d':'—'}</span></td>
       <td><span style="font-weight:700;color:#10b981">${m.fastest!==null?m.fastest.toFixed(1)+'d':'—'}</span></td>
