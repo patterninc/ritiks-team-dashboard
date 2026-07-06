@@ -460,7 +460,7 @@ tbody td{padding:8px 13px;font-size:12px;}
       <option value="name">Name A→Z</option>
       <option value="total">Most Tasks</option>
       <option value="overdue">Most Overdue</option>
-      <option value="week">Due This Week</option>
+      <option value="week">Most Completed</option>
     </select>
     <span class="ctrl-label" style="margin-left:6px;">Show:</span>
     <select id="m-filter" onchange="renderMembers()">
@@ -488,10 +488,9 @@ tbody td{padding:8px 13px;font-size:12px;}
           <thead>
             <tr>
               <th>Member</th>
-              <th onclick="setMSort('total')">Total ↕</th>
+              <th onclick="setMSort('total')">Total (All-time) ↕</th>
               <th onclick="setMSort('overdue')">Overdue ↕</th>
-              <th onclick="setMSort('today')">Today ↕</th>
-              <th onclick="setMSort('week')">This Week ↕</th>
+              <th onclick="setMSort('week')">Completed ↕</th>
               <th onclick="setMSort('noDue')">No Date ↕</th>
               <th>Top Section</th>
             </tr>
@@ -941,6 +940,19 @@ function switchTab(id){
   }
 }
 
+// ── All-time member stats (from _allBoardTasks — completed + incomplete) ──
+function buildAllTimeMemberStats(tasks){
+  const stats={};
+  for(const n of ALL_MEMBERS)stats[n]={totalAll:0,completedAll:0};
+  for(const t of tasks){
+    const an=t.assignee?.name;
+    if(!an||!stats[an])continue;
+    stats[an].totalAll++;
+    if(t.completed)stats[an].completedAll++;
+  }
+  return stats;
+}
+
 // ── Build member stats ──
 function buildMemberStats(tasks){
   const stats={};
@@ -1045,7 +1057,7 @@ function getMemberList(){
   const sort=document.getElementById('m-sort').value;
   const filter=document.getElementById('m-filter').value;
   const q=document.getElementById('m-search').value.toLowerCase().trim();
-  let list=ALL_MEMBERS.map(name=>({name,isSme:SMES.includes(name),...(window._memberStats?.[name]||{total:0,overdue:0,today:0,week:0,noDue:0,sections:{}})}));
+  let list=ALL_MEMBERS.map(name=>({name,isSme:SMES.includes(name),...(window._memberStats?.[name]||{total:0,overdue:0,today:0,week:0,noDue:0,sections:{}}),...(window._allTimeMemberStats?.[name]||{totalAll:null,completedAll:null})}));
   if(filter==='members')list=list.filter(m=>!m.isSme);
   if(filter==='smes')list=list.filter(m=>m.isSme);
   if(filter==='with-tasks')list=list.filter(m=>m.total>0);
@@ -1054,7 +1066,7 @@ function getMemberList(){
   if(sort==='name')list.sort((a,b)=>a.name.localeCompare(b.name));
   if(sort==='total')list.sort((a,b)=>b.total-a.total);
   if(sort==='overdue')list.sort((a,b)=>b.overdue-a.overdue);
-  if(sort==='week')list.sort((a,b)=>b.week-a.week);
+  if(sort==='week')list.sort((a,b)=>(b.completedAll||0)-(a.completedAll||0));
   return list;
 }
 function segbarHtml(sections){
@@ -1071,11 +1083,10 @@ function renderMembers(){
       const top3=Object.entries(m.sections).sort((a,b)=>b[1]-a[1]).slice(0,3);
       return`<div class="mc ${m.isSme?'sme':'member'}${m.total===0?' dimmed':''}" onclick="openMemberTasksModal('${esc(m.name)}')" style="cursor:pointer;" title="Click to view all tasks">
         <div class="mc-head"><div class="av" style="background:${color}">${inits(m.name)}</div><div style="flex:1;min-width:0"><div class="mc-name" title="${esc(m.name)}">${esc(m.name)}</div><span class="role-chip ${m.isSme?'chip-sme':'chip-mem'}">${m.isSme?'SME':'Member'}</span></div><span style="font-size:10px;color:#c0c9d4;margin-left:auto" title="Click to view tasks">↗</span></div>
-        <div class="metrics4">
-          <div class="met met-total"><div class="met-num">${m.total}</div><div class="met-lbl">Total</div></div>
+        <div class="metrics4" style="grid-template-columns:repeat(3,1fr)">
+          <div class="met met-total"><div class="met-num">${m.totalAll??m.total}</div><div class="met-lbl">Total</div></div>
           <div class="met met-ov"><div class="met-num">${m.overdue}</div><div class="met-lbl">Overdue</div></div>
-          <div class="met met-td"><div class="met-num">${m.today}</div><div class="met-lbl">Today</div></div>
-          <div class="met met-wk"><div class="met-num">${m.week}</div><div class="met-lbl">Week</div></div>
+          <div class="met" style="background:#0a1f12"><div class="met-num" style="color:#34D399">${m.completedAll??'…'}</div><div class="met-lbl">Completed</div></div>
         </div>
         <div class="bar-lbl">Section breakdown</div>
         ${segbarHtml(m.sections)}
@@ -1090,10 +1101,9 @@ function renderMembers(){
       const topHtml=topSec?`<span style="font-size:10px;padding:2px 7px;border-radius:4px;background:${SEC_COLORS[topSec[0]]||'#f0f2f5'}22;color:${SEC_COLORS[topSec[0]]||'#6b7c93'};font-weight:600">${esc(topSec[0])} (${topSec[1]})</span>`:'—';
       return`<tr class="${m.isSme?'trow-sme':'trow-mem'}">
         <td><div class="tname"><div class="tav" style="background:${color}">${inits(m.name)}</div>${esc(m.name)}${m.isSme?'<span style="font-size:9px;background:#1C1500;color:#F59E0B;padding:1px 5px;border-radius:3px;font-weight:700;margin-left:4px">SME</span>':''}</div></td>
-        <td><span class="num-tot">${m.total}</span></td>
+        <td><span class="num-tot">${m.totalAll??m.total}</span></td>
         <td><span class="${m.overdue>0?'num-ov':''}">${m.overdue||'—'}</span></td>
-        <td><span class="${m.today>0?'num-td':''}">${m.today||'—'}</span></td>
-        <td><span class="${m.week>0?'num-wk':''}">${m.week||'—'}</span></td>
+        <td><span class="num-done">${m.completedAll??'…'}</span></td>
         <td>${m.noDue||'—'}</td>
         <td>${topHtml}</td>
       </tr>`;
@@ -1440,7 +1450,7 @@ async function init(){
         try{
           let allBoard=[],bOffset=null,bPage=1;
           while(bPage<=200){
-            const bp={project:PROJECT_ID,limit:100,opt_fields:'gid,created_at,completed_at,due_on,completed',completed_since:'1970-01-01'};
+            const bp={project:PROJECT_ID,limit:100,opt_fields:'gid,created_at,completed_at,due_on,completed,assignee.name',completed_since:'1970-01-01'};
             if(bOffset)bp.offset=bOffset;
             const bp2=await asanaGet(bp);
             const batch=bp2.data||[];
@@ -1451,10 +1461,12 @@ async function init(){
             bOffset=bnp.offset;bPage++;
           }
           window._allBoardTasks=allBoard;
+          window._allTimeMemberStats=buildAllTimeMemberStats(allBoard);
           _btEl.textContent=allBoard.length.toLocaleString();
           _btEl.title='All tasks: completed + incomplete';
           localStorage.setItem(_btCacheKey,JSON.stringify({count:allBoard.length,ts:Date.now()}));
           renderFlowChart();
+          renderMembers();
         }catch(e){_btEl.textContent='—';}
       })();
     }
