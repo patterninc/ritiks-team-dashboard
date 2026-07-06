@@ -95,6 +95,7 @@ select:hover,.srch:hover{border-color:#2563EB;}
 .role-chip{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:2px 6px;border-radius:4px;display:inline-block;margin-top:2px;}
 .chip-sme{background:#1C1500;color:#F59E0B;}
 .chip-mem{background:#0f1f3d;color:#60A5FA;}
+.chip-lead{background:#0a2030;color:#22d3ee;}
 .metrics4{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-bottom:9px;}
 .met{border-radius:7px;padding:6px 3px;text-align:center;}
 .met-num{font-size:17px;font-weight:900;line-height:1;}
@@ -293,7 +294,7 @@ tbody td{padding:8px 13px;font-size:12px;}
     <img src="https://cdn.prod.website-files.com/67d327c7ca817d803c46c86b/6947eebea70bf0d7e9b94d8a_08fef4496c61cdc52e9b7824c306795a_pattern_footer_logo.svg" alt="Pattern" style="height:28px;width:auto;flex-shrink:0;filter:brightness(0) invert(1);">
     <div>
       <div class="topbar-title">Ritik's Team</div>
-      <div class="topbar-sub">36 Members · 2 SMEs · Project 1213815648333372</div>
+      <div class="topbar-sub">36 Members · 2 SMEs · 1 Lead · Project 1213815648333372</div>
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:8px;">
@@ -464,9 +465,10 @@ tbody td{padding:8px 13px;font-size:12px;}
     </select>
     <span class="ctrl-label" style="margin-left:6px;">Show:</span>
     <select id="m-filter" onchange="renderMembers()">
-      <option value="all">All (Members + SMEs)</option>
+      <option value="all">All (Members + SMEs + Lead)</option>
       <option value="members">Members Only</option>
       <option value="smes">SMEs Only</option>
+      <option value="leads">Lead Only</option>
       <option value="with-tasks">Has Tasks</option>
       <option value="overdue">Has Overdue</option>
     </select>
@@ -903,7 +905,8 @@ async function asanaGet(params){
 const PROJECT_ID='1213815648333372';
 const MEMBERS=['Alind Dash','Jayashree Joshi','Divij Singh','Azima Keshvani','Gauri Tatkondawar','Vibhuti Dhurandhar','Dhimahi Dasot','Siddhesh Gampawar','Om Keni','Sujal Richawara','Asmeet Chhabra','Mansi Sengar','Riya Bhandarkar','Tanusha Mathur','Avinash Deewan','Komal Suryavanshi','Varnika Bajaj','Vrushali Korde','Prajakta Awale','Shatabdda Bharadwaj','Gargi Nerale','Neha Shrivastava','Juhi Chokhawala','Yash Mast','Aditi Raikwar','Balpreet Sasan','Sumit Kumar','Molli Chugh','Kartik Mishra','Anvee Sangrai','Abhinav Singh','Amit Kumar','Shivani Kale','Gayatri Munjewar','Tamanna Pareek','Pragati Jain'];
 const SMES=['Aachal Gaikwad','Kajal Mittal'];
-const ALL_MEMBERS=[...MEMBERS,...SMES];
+const LEADS=['Ritik Agiwal'];
+const ALL_MEMBERS=[...MEMBERS,...SMES,...LEADS];
 const TEAM_SET=new Set(ALL_MEMBERS);
 
 const SEC_COLORS={'New Projects':'#2563EB','Waiting for Core Team':'#f59e0b','Stranded Inventory':'#ef4444','Assigned':'#8b5cf6','In Progress':'#10b981','Waiting for SEM/EPM':'#f97316','Needs Review from SEM/EPM':'#ec4899','Account Health Approval (Waiting)':'#eab308','Account Health Approval':'#eab308','Case Submitted':'#06b6d4','Cases Escalation':'#dc2626','Need to Check':'#a855f7','On Hold':'#6b7280','Team Work - Collaboration Tasks':'#14b8a6','Syndication Issue - On Hold':'#fb923c','Recurring Tasks':'#64748b','Complete':'#22c55e'};
@@ -1096,7 +1099,7 @@ function getMemberList(){
   const monthStats=selMonth&&boardLoaded?buildMonthlyMemberStats(selMonth,window._allBoardTasks):null;
 
   let list=ALL_MEMBERS.map(name=>({
-    name,isSme:SMES.includes(name),
+    name,isSme:SMES.includes(name),isLead:LEADS.includes(name),
     ...(window._memberStats?.[name]||{total:0,overdue:0,today:0,week:0,noDue:0,sections:{}}),
     ...(window._allTimeMemberStats?.[name]||{totalAll:null,completedAll:null}),
     totalM:monthStats?.[name]?.totalM??null,
@@ -1110,8 +1113,9 @@ function getMemberList(){
   const mOverdue=m=>selMonth?(boardLoaded?m.overdueM:null):m.overdue;
   const mCompleted=m=>selMonth?(boardLoaded?m.completedM:null):(m.completedAll??null);
 
-  if(filter==='members')list=list.filter(m=>!m.isSme);
+  if(filter==='members')list=list.filter(m=>!m.isSme&&!m.isLead);
   if(filter==='smes')list=list.filter(m=>m.isSme);
+  if(filter==='leads')list=list.filter(m=>m.isLead);
   if(filter==='with-tasks')list=list.filter(m=>(mTotal(m)||0)>0);
   if(filter==='overdue')list=list.filter(m=>(mOverdue(m)||0)>0);
   if(q)list=list.filter(m=>m.name.toLowerCase().includes(q));
@@ -1140,8 +1144,11 @@ function renderMembers(){
       const totalLbl=sel?'Assigned':'Total';
       const overdLbl=sel?'Past Due':'Overdue';
       const isDimmed=sel?(loaded&&m.totalM===0):m.total===0;
-      return`<div class="mc ${m.isSme?'sme':'member'}${isDimmed?' dimmed':''}" onclick="openMemberTasksModal('${esc(m.name)}')" style="cursor:pointer;" title="Click to view all tasks">
-        <div class="mc-head"><div class="av" style="background:${color}">${inits(m.name)}</div><div style="flex:1;min-width:0"><div class="mc-name" title="${esc(m.name)}">${esc(m.name)}</div><span class="role-chip ${m.isSme?'chip-sme':'chip-mem'}">${m.isSme?'SME':'Member'}</span></div><span style="font-size:10px;color:#c0c9d4;margin-left:auto" title="Click to view tasks">↗</span></div>
+      const roleChipCls=m.isLead?'chip-lead':m.isSme?'chip-sme':'chip-mem';
+      const roleLabel=m.isLead?'Lead':m.isSme?'SME':'Member';
+      const cardCls=m.isLead?'sme':m.isSme?'sme':'member'; // leads get same card border as SMEs
+      return`<div class="mc ${cardCls}${isDimmed?' dimmed':''}" onclick="openMemberTasksModal('${esc(m.name)}')" style="cursor:pointer;" title="Click to view all tasks">
+        <div class="mc-head"><div class="av" style="background:${color}">${inits(m.name)}</div><div style="flex:1;min-width:0"><div class="mc-name" title="${esc(m.name)}">${esc(m.name)}</div><span class="role-chip ${roleChipCls}">${roleLabel}</span></div><span style="font-size:10px;color:#c0c9d4;margin-left:auto" title="Click to view tasks">↗</span></div>
         <div class="metrics4" style="grid-template-columns:repeat(3,1fr)">
           <div class="met met-total"><div class="met-num">${totalDisp}</div><div class="met-lbl">${totalLbl}</div></div>
           <div class="met met-ov"><div class="met-num">${overdueDisp}</div><div class="met-lbl">${overdLbl}</div></div>
@@ -1172,8 +1179,10 @@ function renderMembers(){
       const tDisp=sel?(bl?m.totalM:'…'):(m.totalAll??m.total);
       const oDisp=sel?(bl?m.overdueM:'…'):m.overdue;
       const cDisp=sel?(bl?m.completedM:'…'):(m.completedAll??'…');
-      return`<tr class="${m.isSme?'trow-sme':'trow-mem'}">
-        <td><div class="tname"><div class="tav" style="background:${color}">${inits(m.name)}</div>${esc(m.name)}${m.isSme?'<span style="font-size:9px;background:#1C1500;color:#F59E0B;padding:1px 5px;border-radius:3px;font-weight:700;margin-left:4px">SME</span>':''}</div></td>
+      const tRowCls=m.isLead?'trow-sme':m.isSme?'trow-sme':'trow-mem';
+      const tBadge=m.isLead?'<span style="font-size:9px;background:#0a2030;color:#22d3ee;padding:1px 5px;border-radius:3px;font-weight:700;margin-left:4px">LEAD</span>':m.isSme?'<span style="font-size:9px;background:#1C1500;color:#F59E0B;padding:1px 5px;border-radius:3px;font-weight:700;margin-left:4px">SME</span>':'';
+      return`<tr class="${tRowCls}">
+        <td><div class="tname"><div class="tav" style="background:${color}">${inits(m.name)}</div>${esc(m.name)}${tBadge}</div></td>
         <td><span class="num-tot">${tDisp}</span></td>
         <td><span class="${(!sel&&m.overdue>0)||(sel&&bl&&m.overdueM>0)?'num-ov':''}">${oDisp||'—'}</span></td>
         <td><span class="num-done">${cDisp}</span></td>
