@@ -1228,11 +1228,17 @@ async function loadCompleted(period){
 
   try {
     const t=todayStr();
+    // All period boundaries computed in UTC to avoid IST/timezone shift bugs
+    const nowUTC=new Date();
+    const uy=nowUTC.getUTCFullYear(),um=nowUTC.getUTCMonth(),ud=nowUTC.getUTCDate();
+    const utcDay=nowUTC.getUTCDay(); // 0=Sun
+    const daysToMon=utcDay===0?6:utcDay-1;
+    const weekStart=new Date(Date.UTC(uy,um,ud-daysToMon)); // Monday 00:00 UTC
     const sinceMap={
       day:t+'T00:00:00.000Z',
-      week:addDays(-7)+'T00:00:00.000Z',
-      month:new Date(new Date().getFullYear(),new Date().getMonth(),1).toISOString(),
-      year:new Date(new Date().getFullYear(),0,1).toISOString(),
+      week:weekStart.toISOString(),
+      month:new Date(Date.UTC(uy,um,1)).toISOString(),
+      year:new Date(Date.UTC(uy,0,1)).toISOString(),
       all:'2020-01-01T00:00:00.000Z'
     };
     const since=sinceMap[period];
