@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Ritik's Team Dashboard [v3]</title>
+<title>Ritik's Team Dashboard</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.js" integrity="sha384-iU8HYtnGQ8Cy4zl7gbNMOhsDTTKX02BTXptVP/vqAWIaTfM7isw76iyZCsjL2eVi" crossorigin="anonymous"></script>
 <style>
 :root{color-scheme:dark;}
@@ -454,7 +454,6 @@ tbody td{padding:8px 13px;font-size:12px;}
      TAB 2: MEMBERS
 ════════════════════════════════════════════ -->
 <div class="page" id="tab-members">
-  <div style="font-size:10px;color:#2563EB;text-align:right;padding:2px 4px 0;letter-spacing:.3px;">v2 · Total/Overdue/Completed</div>
   <div class="controls-bar">
     <span class="ctrl-label">Sort:</span>
     <select id="m-sort" onchange="renderMembers()">
@@ -1451,7 +1450,7 @@ async function init(){
         try{
           let allBoard=[],bOffset=null,bPage=1;
           while(bPage<=200){
-            const bp={project:PROJECT_ID,limit:100,opt_fields:'gid,created_at,completed_at,due_on,completed,assignee.name',completed_since:'1970-01-01'};
+            const bp={project:PROJECT_ID,limit:100,opt_fields:'gid,name,permalink_url,created_at,completed_at,due_on,completed,assignee.name',completed_since:'1970-01-01'};
             if(bOffset)bp.offset=bOffset;
             const bp2=await asanaGet(bp);
             const batch=bp2.data||[];
@@ -1852,52 +1851,67 @@ function openRecurringModal(memberName, perMember){
 
 // ── Members tab modal ──
 function openMemberTasksModal(memberName){
-  const memberTasks = allTasks.filter(t=>t.assignee?.name===memberName && !t.completed && !isRecurring(t));
+  const today = todayStr();
+  const activeTasks = (allTasks||[]).filter(t=>t.assignee?.name===memberName && !t.completed && !isRecurring(t));
+  const overdue  = activeTasks.filter(t=>t.due_on&&t.due_on<today);
+  const active   = activeTasks.filter(t=>!t.due_on||t.due_on>=today);
+
+  // Completed tasks come from the background all-tasks fetch
+  const allBoard = window._allBoardTasks||[];
+  const completed = allBoard.filter(t=>t.assignee?.name===memberName && t.completed)
+                             .sort((a,b)=>(b.completed_at||'').localeCompare(a.completed_at||''));
+
   const color = avColor(memberName);
   const isSme = SMES.includes(memberName);
   document.getElementById('modal-av').textContent = inits(memberName);
   document.getElementById('modal-av').style.background = color;
   document.getElementById('modal-name').textContent = memberName;
-  document.getElementById('modal-sub').textContent = `${memberTasks.length} open task${memberTasks.length!==1?'s':''} · ${isSme?'SME':'Member'}`;
+  document.getElementById('modal-sub').textContent =
+    `${overdue.length} overdue · ${active.length} active · ${completed.length} completed${!allBoard.length?' (loading…)':''} · ${isSme?'SME':'Member'}`;
 
-  const today = todayStr();
-  const week  = addDays(7);
-  const groups = [
-    { label:'🔴 Overdue',     color:'#ef4444', tasks: memberTasks.filter(t=>t.due_on&&t.due_on<today) },
-    { label:'📅 Due Today',   color:'#f97316', tasks: memberTasks.filter(t=>t.due_on&&t.due_on===today) },
-    { label:'📆 This Week',   color:'#f59e0b', tasks: memberTasks.filter(t=>t.due_on&&t.due_on>today&&t.due_on<=week) },
-    { label:'🗓 Future',      color:'#2563EB', tasks: memberTasks.filter(t=>t.due_on&&t.due_on>week) },
-    { label:'— No Due Date',  color:'#9ba8b8', tasks: memberTasks.filter(t=>!t.due_on) },
+  function taskRowHtml(task, showCompletedDate=false){
+    const sec = getSection(task);
+    const due = task.due_on;
+    const isOver = !showCompletedDate && due && due<today;
+    const dueCls = isOver?'background:#1f0a0a;color:#F87171':due===today?'background:#1C1500;color:#d97706':'background:#1E2A3A;color:#9CA3AF';
+    const dateLabel = showCompletedDate
+      ? (task.completed_at?`<span style="font-size:10px;font-weight:600;padding:1px 5px;border-radius:3px;background:#0a1f12;color:#34D399">✓ ${task.completed_at.slice(0,10)}</span>`:'')
+      : (due?`<span style="font-size:10px;font-weight:600;padding:1px 5px;border-radius:3px;${dueCls}">${due}</span>`:'');
+    const url = task.permalink_url || taskUrl(task);
+    return `<div class="task-link-row" style="${isOver?'border-color:#7F1D1D;background:#1f0a0a;':''}">
+      <div style="flex:1;min-width:0;">
+        <a href="${url}" target="_blank" title="Open in Asana">${esc(task.name||'—')}</a>
+        <div class="task-link-meta">
+          ${sec?`<span style="font-size:10px;color:#6B7280;background:#1E2A3A;padding:1px 5px;border-radius:3px">${esc(sec)}</span>`:''}
+          ${dateLabel}
+        </div>
+      </div>
+      <a href="${url}" target="_blank" class="task-link-icon" title="Open in Asana">↗</a>
+    </div>`;
+  }
+
+  const sections = [
+    { label:'🔴 Overdue', color:'#ef4444', tasks:overdue,    completed:false },
+    { label:'📋 Active',  color:'#60A5FA', tasks:active,     completed:false },
+    { label:'✅ Completed All-Time', color:'#34D399', tasks:completed, completed:true },
   ];
 
   let html = '';
-  for(const g of groups){
+  for(const g of sections){
     if(!g.tasks.length) continue;
     html += `<div class="task-modal-section">
       <div class="task-modal-section-title">
         <span style="color:${g.color}">${g.label}</span>
         <span style="color:#6B7280;font-weight:400">(${g.tasks.length})</span>
       </div>`;
-    for(const task of g.tasks){
-      const sec = getSection(task);
-      const due = task.due_on;
-      const isOver = due && due < today;
-      const dueCls = isOver?'background:#1f0a0a;color:#F87171':due===today?'background:#1C1500;color:#d97706':'background:#1E2A3A;color:#9CA3AF';
-      html += `<div class="task-link-row" style="${isOver?'border-color:#7F1D1D;background:#1f0a0a;':''}">
-        <div style="flex:1;min-width:0;">
-          <a href="${taskUrl(task)}" target="_blank" title="Open in Asana">${esc(task.name)}</a>
-          <div class="task-link-meta">
-            ${sec?`<span style="font-size:10px;color:#6B7280;background:#1E2A3A;padding:1px 5px;border-radius:3px">${esc(sec)}</span>`:''}
-            ${due?`<span style="font-size:10px;font-weight:600;padding:1px 5px;border-radius:3px;${dueCls}">${due}</span>`:''}
-          </div>
-        </div>
-        <a href="${taskUrl(task)}" target="_blank" class="task-link-icon" title="Open in Asana">↗</a>
-      </div>`;
-    }
+    for(const task of g.tasks) html += taskRowHtml(task, g.completed);
     html += `</div>`;
   }
 
-  document.getElementById('modal-body').innerHTML = html || '<div style="color:#9ba8b8;padding:20px;text-align:center">No open tasks</div>';
+  if(!html && !allBoard.length) html = '<div style="color:#9ba8b8;padding:20px;text-align:center">Loading task history… try again in a moment.</div>';
+  else if(!html) html = '<div style="color:#9ba8b8;padding:20px;text-align:center">No tasks found.</div>';
+
+  document.getElementById('modal-body').innerHTML = html;
   document.getElementById('taskModal').style.display = 'flex';
   document.body.style.overflow = 'hidden';
 }
@@ -2501,18 +2515,4 @@ function getMemberReview(name){
   if(overdueRate===0&&s.total<=teamAvgTotal){badge='Excellent';badgeClass='badge-great';}
   else if(overdueRate<0.2&&s.total<=teamAvgTotal*1.5){badge='On Track';badgeClass='badge-good';}
   else if(overdueRate>=0.4||s.overdue>=5){badge='Needs Attention';badgeClass='badge-watch';}
-  else{badge='Moderate Load';badgeClass='badge-good';}
-
-  // Build bullets
-  const bullets=[];
-  bullets.push(`<b>Open tasks:</b> ${s.total} (team avg: ${teamAvgTotal})`);
-  bullets.push(`<b>Overdue:</b> ${s.overdue} task${s.overdue!==1?'s':''} (team avg: ${teamAvgOverdue})`);
-  bullets.push(`<b>Due this week:</b> ${s.week}`);
-  bullets.push(`<b>Avg task age:</b> ${avgDays} days open`);
-  if(s.noDue>0) bullets.push(`<b>No due date:</b> ${s.noDue} task${s.noDue!==1?'s':''} — consider adding deadlines`);
-
-  // Insight
-  let insight='';
-  if(s.overdue===0&&s.total>0) insight='✅ No overdue tasks — great discipline on deadlines.';
-  else if(overdueRate>=0.5) insight='🔴 More than half of tasks are overdue — may need reprioritisation or support.';
-  else if(overdu
+  else{badge
