@@ -95,7 +95,7 @@ select:hover,.srch:hover{border-color:#2563EB;}
 .role-chip{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:2px 6px;border-radius:4px;display:inline-block;margin-top:2px;}
 .chip-sme{background:#1C1500;color:#F59E0B;}
 .chip-mem{background:#0f1f3d;color:#60A5FA;}
-.chip-lead{background:#0a2030;color:#22d3ee;}
+.chip-lead{background:#1e0a3c;color:#c084fc;}
 .metrics4{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-bottom:9px;}
 .met{border-radius:7px;padding:6px 3px;text-align:center;}
 .met-num{font-size:17px;font-weight:900;line-height:1;}
@@ -1180,7 +1180,7 @@ function renderMembers(){
       const oDisp=sel?(bl?m.overdueM:'…'):m.overdue;
       const cDisp=sel?(bl?m.completedM:'…'):(m.completedAll??'…');
       const tRowCls=m.isLead?'trow-sme':m.isSme?'trow-sme':'trow-mem';
-      const tBadge=m.isLead?'<span style="font-size:9px;background:#0a2030;color:#22d3ee;padding:1px 5px;border-radius:3px;font-weight:700;margin-left:4px">LEAD</span>':m.isSme?'<span style="font-size:9px;background:#1C1500;color:#F59E0B;padding:1px 5px;border-radius:3px;font-weight:700;margin-left:4px">SME</span>':'';
+      const tBadge=m.isLead?'<span style="font-size:9px;background:#1e0a3c;color:#c084fc;padding:1px 5px;border-radius:3px;font-weight:700;margin-left:4px">LEAD</span>':m.isSme?'<span style="font-size:9px;background:#1C1500;color:#F59E0B;padding:1px 5px;border-radius:3px;font-weight:700;margin-left:4px">SME</span>':'';
       return`<tr class="${tRowCls}">
         <td><div class="tname"><div class="tav" style="background:${color}">${inits(m.name)}</div>${esc(m.name)}${tBadge}</div></td>
         <td><span class="num-tot">${tDisp}</span></td>
