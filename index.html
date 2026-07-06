@@ -135,11 +135,13 @@ tbody td{padding:8px 13px;font-size:12px;}
 .num-done{color:#22c55e;font-weight:700;}
 
 /* ── Completed tab ── */
-.period-bar{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;align-items:center;}
+.period-bar{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;}
 .period-btn{padding:6px 14px;border-radius:20px;border:1px solid #1E2A3A;background:#0D1117;font-size:12px;font-weight:600;color:#9CA3AF;cursor:pointer;transition:all .15s;}
 .period-btn:hover{border-color:#2563EB;color:#2563EB;}
 .period-btn.active{background:#2563EB;color:white;border-color:#2563EB;}
 .period-note{font-size:11px;color:#6B7280;margin-left:auto;}
+input[type="date"].date-pick{font-size:12px;color:#F9FAFB;background:#0D1117;border:1px solid #1E2A3A;border-radius:6px;padding:5px 8px;outline:none;cursor:pointer;transition:border-color .15s;color-scheme:dark;}
+input[type="date"].date-pick:hover,input[type="date"].date-pick:focus{border-color:#2563EB;}
 .comp-loading{display:flex;align-items:center;gap:10px;padding:30px;color:#6B7280;font-size:13px;}
 
 /* ── Brand tab ── */
@@ -515,12 +517,12 @@ tbody td{padding:8px 13px;font-size:12px;}
 ════════════════════════════════════════════ -->
 <div class="page" id="tab-completed">
   <div class="period-bar">
-    <button class="period-btn" onclick="loadCompleted('day')">Today</button>
-    <button class="period-btn" onclick="loadCompleted('week')">This Week</button>
-    <button class="period-btn" onclick="loadCompleted('month')">This Month</button>
-    <button class="period-btn" onclick="loadCompleted('year')">This Year</button>
-    <button class="period-btn" onclick="loadCompleted('all')">So Far (All Time)</button>
-    <span class="period-note" id="comp-note">Select a period to load</span>
+    <span class="ctrl-label">From:</span>
+    <input type="date" id="comp-from" class="date-pick" />
+    <span class="ctrl-label" style="margin-left:4px;">To:</span>
+    <input type="date" id="comp-to" class="date-pick" />
+    <button class="period-btn active" id="comp-apply-btn" onclick="loadCompleted()">Apply</button>
+    <span class="period-note" id="comp-note"></span>
   </div>
 
   <div id="comp-loading" class="comp-loading" style="display:none;">
@@ -533,7 +535,7 @@ tbody td{padding:8px 13px;font-size:12px;}
       <div class="stat-card" style="--sc:#22c55e">
         <div class="sc-label">Tasks Done</div>
         <div class="sc-num" id="comp-total">—</div>
-        <div class="sc-sub">in period</div>
+        <div class="sc-sub" id="comp-period-label">in range</div>
       </div>
       <div class="stat-card" style="--sc:#2563EB">
         <div class="sc-label">Members Active</div>
@@ -572,11 +574,7 @@ tbody td{padding:8px 13px;font-size:12px;}
     </div>
   </div>
 
-  <div id="comp-placeholder" style="padding:60px;text-align:center;color:#9ba8b8;">
-    <div style="font-size:32px;margin-bottom:10px;">✅</div>
-    <div style="font-size:14px;font-weight:600;margin-bottom:6px;">Choose a time period above</div>
-    <div style="font-size:12px;">See how many tasks each member has completed</div>
-  </div>
+  <div id="comp-placeholder" style="display:none;"></div>
 </div>
 
 <!-- ═══════════════════════════════════════════
@@ -938,6 +936,12 @@ function switchTab(id){
   const pg=document.getElementById('tab-'+id);
   if(pg){pg.classList.add('active');pg.style.display='block';}
   if(event&&event.target) event.target.classList.add('active');
+  if(id==='completed'){
+    initCompletedDates();
+    if(!document.getElementById('comp-content').style.display||document.getElementById('comp-content').style.display==='none'){
+      loadCompleted();
+    }
+  }
   if(id==='timing' && allTasks.length>0 && !window._statusRendered){
     renderStatusTracking(allTasks);
     window._statusRendered=true;
@@ -1212,48 +1216,46 @@ function setMemberView(v){
 function setMSort(col){document.getElementById('m-sort').value=col;renderMembers();}
 
 // ── Completed tab ──
-let lastPeriod=null;
-async function loadCompleted(period){
-  if(lastPeriod===period)return;
-  lastPeriod=period;
+function initCompletedDates(){
+  // Default: 1st of current month → today (UTC-based)
+  const now=new Date();
+  const y=now.getUTCFullYear(),m=String(now.getUTCMonth()+1).padStart(2,'0');
+  const d=String(now.getUTCDate()).padStart(2,'0');
+  const fromEl=document.getElementById('comp-from');
+  const toEl=document.getElementById('comp-to');
+  if(fromEl&&!fromEl.value) fromEl.value=`${y}-${m}-01`;
+  if(toEl&&!toEl.value) toEl.value=`${y}-${m}-${d}`;
+}
 
-  document.querySelectorAll('.period-btn').forEach(b=>b.classList.remove('active'));
-  event.target.classList.add('active');
+async function loadCompleted(){
+  initCompletedDates();
+  const fromVal=document.getElementById('comp-from').value;
+  const toVal=document.getElementById('comp-to').value;
+  if(!fromVal||!toVal){document.getElementById('comp-note').textContent='Please select both dates.';return;}
+  if(fromVal>toVal){document.getElementById('comp-note').textContent='From date must be before To date.';return;}
+
   document.getElementById('comp-placeholder').style.display='none';
   document.getElementById('comp-content').style.display='none';
   document.getElementById('comp-loading').style.display='flex';
+  document.getElementById('comp-note').textContent=`Loading ${fromVal} → ${toVal}…`;
 
-  const labels={'day':'Today','week':'This Week','month':'This Month','year':'This Year','all':'All Time'};
-  document.getElementById('comp-note').textContent=`Loading ${labels[period]}…`;
-
-  try {
-    const t=todayStr();
-    // All period boundaries computed in UTC to avoid IST/timezone shift bugs
-    const nowUTC=new Date();
-    const uy=nowUTC.getUTCFullYear(),um=nowUTC.getUTCMonth(),ud=nowUTC.getUTCDate();
-    const utcDay=nowUTC.getUTCDay(); // 0=Sun
-    const daysToMon=utcDay===0?6:utcDay-1;
-    const weekStart=new Date(Date.UTC(uy,um,ud-daysToMon)); // Monday 00:00 UTC
-    const sinceMap={
-      day:t+'T00:00:00.000Z',
-      week:weekStart.toISOString(),
-      month:new Date(Date.UTC(uy,um,1)).toISOString(),
-      year:new Date(Date.UTC(uy,0,1)).toISOString(),
-      all:'2020-01-01T00:00:00.000Z'
-    };
-    const since=sinceMap[period];
-    const maxPages=period==='all'?12:4;
+  try{
+    const since=fromVal+'T00:00:00.000Z';
+    const until=toVal+'T23:59:59.999Z';
 
     let tasks=[],offset=null,page=1;
-    while(page<=maxPages){
-      document.getElementById('comp-load-text').textContent=`Fetching page ${page} of completed tasks… (${tasks.length} so far)`;
+    while(page<=20){
+      document.getElementById('comp-load-text').textContent=`Fetching page ${page}… (${tasks.length} found so far)`;
       const params={project:PROJECT_ID,limit:100,opt_fields:'gid,name,completed,completed_at,assignee.name',completed_since:since};
       if(offset)params.offset=offset;
       const parsed=await asanaGet(params);
-      const batch=(parsed.data||[]).filter(tk=>tk.completed===true);
+      const batch=(parsed.data||[]).filter(tk=>tk.completed===true&&(tk.completed_at||'')<=until);
       tasks.push(...batch);
       const np=parsed.next_page;
       if(!np||!np.offset)break;
+      // Stop early if all remaining tasks are past the until date
+      const lastInPage=(parsed.data||[]).at(-1);
+      if(lastInPage&&lastInPage.completed_at&&lastInPage.completed_at>until)break;
       offset=np.offset;page++;
     }
 
@@ -1261,7 +1263,7 @@ async function loadCompleted(period){
     const teamTasks=tasks.filter(tk=>tk.assignee&&TEAM_SET.has(tk.assignee.name));
     const byCounts={};
     for(const n of ALL_MEMBERS)byCounts[n]=0;
-    for(const tk of teamTasks){byCounts[tk.assignee.name]=(byCounts[tk.assignee.name]||0)+1;}
+    for(const tk of teamTasks)byCounts[tk.assignee.name]=(byCounts[tk.assignee.name]||0)+1;
 
     const sorted=Object.entries(byCounts).filter(([,c])=>c>0).sort((a,b)=>b[1]-a[1]);
     const total=sorted.reduce((a,[,c])=>a+c,0);
@@ -1269,12 +1271,17 @@ async function loadCompleted(period){
     const top=sorted[0];
     const avg=activeMembers?Math.round(total/activeMembers):0;
 
+    // Format display label
+    const fmt=s=>{const[y,m,d]=s.split('-');const mn=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];return`${d} ${mn[+m-1]} ${y}`;};
+    const rangeLabel=fromVal===toVal?fmt(fromVal):`${fmt(fromVal)} – ${fmt(toVal)}`;
+
     document.getElementById('comp-total').textContent=total;
     document.getElementById('comp-members').textContent=activeMembers;
     document.getElementById('comp-top').textContent=top?top[0].split(' ')[0]:'—';
     document.getElementById('comp-top-cnt').textContent=top?top[1]+' tasks':'';
     document.getElementById('comp-avg').textContent=avg;
-    document.getElementById('comp-note').textContent=`${labels[period]} · ${tasks.length} total fetched`;
+    document.getElementById('comp-period-label').textContent=rangeLabel;
+    document.getElementById('comp-note').textContent=`${total} tasks · ${rangeLabel}`;
     document.getElementById('comp-table-badge').textContent=activeMembers;
 
     // Chart
@@ -1287,11 +1294,11 @@ async function loadCompleted(period){
     document.getElementById('compTableBody').innerHTML=sorted.map(([name,cnt])=>{
       const color=avColor(name);const role=memberRole(name);
       return`<tr><td><div class="tname"><div class="tav" style="background:${color}">${inits(name)}</div>${esc(name)}</div></td><td><span class="num-done">${cnt}</span></td><td><span class="role-chip ${role.chip}">${role.label}</span></td></tr>`;
-    }).join('')||'<tr><td colspan="3" style="padding:20px;text-align:center;color:#9ba8b8">No completed tasks found</td></tr>';
+    }).join('')||'<tr><td colspan="3" style="padding:20px;text-align:center;color:#9ba8b8">No completed tasks found for this range</td></tr>';
 
     document.getElementById('comp-loading').style.display='none';
     document.getElementById('comp-content').style.display='block';
-  } catch(err){
+  }catch(err){
     document.getElementById('comp-load-text').textContent='⚠️ Error: '+err.message;
   }
 }
