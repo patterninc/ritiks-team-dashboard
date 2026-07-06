@@ -470,6 +470,10 @@ tbody td{padding:8px 13px;font-size:12px;}
       <option value="with-tasks">Has Tasks</option>
       <option value="overdue">Has Overdue</option>
     </select>
+    <span class="ctrl-label" style="margin-left:6px;">Month:</span>
+    <select id="m-month" onchange="renderMembers()">
+      <option value="">All Time</option>
+    </select>
     <input class="srch" id="m-search" placeholder="🔍 Search member…" oninput="renderMembers()" />
     <div class="vt">
       <button class="vbtn active" id="vbtn-cards" onclick="setMemberView('cards')">⊞ Cards</button>
@@ -488,9 +492,9 @@ tbody td{padding:8px 13px;font-size:12px;}
           <thead>
             <tr>
               <th>Member</th>
-              <th onclick="setMSort('total')">Total (All-time) ↕</th>
-              <th onclick="setMSort('overdue')">Overdue ↕</th>
-              <th onclick="setMSort('week')">Completed ↕</th>
+              <th id="th-total" onclick="setMSort('total')">Total (All-time) ↕</th>
+              <th id="th-overdue" onclick="setMSort('overdue')">Overdue ↕</th>
+              <th id="th-completed" onclick="setMSort('week')">Completed ↕</th>
               <th onclick="setMSort('noDue')">No Date ↕</th>
               <th>Top Section</th>
             </tr>
@@ -953,6 +957,36 @@ function buildAllTimeMemberStats(tasks){
   return stats;
 }
 
+// ── Monthly member stats — Assigned/Overdue/Completed for a specific YYYY-MM ──
+function buildMonthlyMemberStats(month, tasks){
+  const stats={};
+  for(const n of ALL_MEMBERS)stats[n]={totalM:0,completedM:0,overdueM:0};
+  for(const t of tasks){
+    const an=t.assignee?.name;
+    if(!an||!stats[an])continue;
+    if((t.created_at||'').startsWith(month))stats[an].totalM++;
+    if((t.completed_at||'').startsWith(month))stats[an].completedM++;
+    if((t.due_on||'').startsWith(month)&&!t.completed)stats[an].overdueM++;
+  }
+  return stats;
+}
+
+// ── Populate month filter dropdown ──
+function populateMonthFilter(){
+  const sel=document.getElementById('m-month');
+  if(!sel||sel.options.length>1)return;
+  const mn=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const today=new Date();
+  for(let i=0;i<18;i++){
+    const d=new Date(today.getFullYear(),today.getMonth()-i,1);
+    const val=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    const opt=document.createElement('option');
+    opt.value=val;
+    opt.textContent=`${mn[d.getMonth()]} ${d.getFullYear()}`;
+    sel.appendChild(opt);
+  }
+}
+
 // ── Build member stats ──
 function buildMemberStats(tasks){
   const stats={};
@@ -1057,16 +1091,34 @@ function getMemberList(){
   const sort=document.getElementById('m-sort').value;
   const filter=document.getElementById('m-filter').value;
   const q=document.getElementById('m-search').value.toLowerCase().trim();
-  let list=ALL_MEMBERS.map(name=>({name,isSme:SMES.includes(name),...(window._memberStats?.[name]||{total:0,overdue:0,today:0,week:0,noDue:0,sections:{}}),...(window._allTimeMemberStats?.[name]||{totalAll:null,completedAll:null})}));
+  const selMonth=document.getElementById('m-month')?.value||'';
+  const boardLoaded=!!(window._allBoardTasks&&window._allBoardTasks.length);
+  const monthStats=selMonth&&boardLoaded?buildMonthlyMemberStats(selMonth,window._allBoardTasks):null;
+
+  let list=ALL_MEMBERS.map(name=>({
+    name,isSme:SMES.includes(name),
+    ...(window._memberStats?.[name]||{total:0,overdue:0,today:0,week:0,noDue:0,sections:{}}),
+    ...(window._allTimeMemberStats?.[name]||{totalAll:null,completedAll:null}),
+    totalM:monthStats?.[name]?.totalM??null,
+    completedM:monthStats?.[name]?.completedM??null,
+    overdueM:monthStats?.[name]?.overdueM??null,
+    _monthSelected:selMonth,
+    _boardLoaded:boardLoaded,
+  }));
+
+  const mTotal=m=>selMonth?(boardLoaded?m.totalM:null):(m.totalAll??m.total);
+  const mOverdue=m=>selMonth?(boardLoaded?m.overdueM:null):m.overdue;
+  const mCompleted=m=>selMonth?(boardLoaded?m.completedM:null):(m.completedAll??null);
+
   if(filter==='members')list=list.filter(m=>!m.isSme);
   if(filter==='smes')list=list.filter(m=>m.isSme);
-  if(filter==='with-tasks')list=list.filter(m=>m.total>0);
-  if(filter==='overdue')list=list.filter(m=>m.overdue>0);
+  if(filter==='with-tasks')list=list.filter(m=>(mTotal(m)||0)>0);
+  if(filter==='overdue')list=list.filter(m=>(mOverdue(m)||0)>0);
   if(q)list=list.filter(m=>m.name.toLowerCase().includes(q));
   if(sort==='name')list.sort((a,b)=>a.name.localeCompare(b.name));
-  if(sort==='total')list.sort((a,b)=>b.total-a.total);
-  if(sort==='overdue')list.sort((a,b)=>b.overdue-a.overdue);
-  if(sort==='week')list.sort((a,b)=>(b.completedAll||0)-(a.completedAll||0));
+  if(sort==='total')list.sort((a,b)=>(mTotal(b)||0)-(mTotal(a)||0));
+  if(sort==='overdue')list.sort((a,b)=>(mOverdue(b)||0)-(mOverdue(a)||0));
+  if(sort==='week')list.sort((a,b)=>(mCompleted(b)||0)-(mCompleted(a)||0));
   return list;
 }
 function segbarHtml(sections){
@@ -1081,12 +1133,19 @@ function renderMembers(){
     document.getElementById('memberCards').innerHTML=list.length?list.map(m=>{
       const color=avColor(m.name);
       const top3=Object.entries(m.sections).sort((a,b)=>b[1]-a[1]).slice(0,3);
-      return`<div class="mc ${m.isSme?'sme':'member'}${m.total===0?' dimmed':''}" onclick="openMemberTasksModal('${esc(m.name)}')" style="cursor:pointer;" title="Click to view all tasks">
+      const sel=m._monthSelected; const loaded=m._boardLoaded;
+      const totalDisp=sel?(loaded?m.totalM:'…'):(m.totalAll??m.total);
+      const overdueDisp=sel?(loaded?m.overdueM:'…'):m.overdue;
+      const completedDisp=sel?(loaded?m.completedM:'…'):(m.completedAll??'…');
+      const totalLbl=sel?'Assigned':'Total';
+      const overdLbl=sel?'Past Due':'Overdue';
+      const isDimmed=sel?(loaded&&m.totalM===0):m.total===0;
+      return`<div class="mc ${m.isSme?'sme':'member'}${isDimmed?' dimmed':''}" onclick="openMemberTasksModal('${esc(m.name)}')" style="cursor:pointer;" title="Click to view all tasks">
         <div class="mc-head"><div class="av" style="background:${color}">${inits(m.name)}</div><div style="flex:1;min-width:0"><div class="mc-name" title="${esc(m.name)}">${esc(m.name)}</div><span class="role-chip ${m.isSme?'chip-sme':'chip-mem'}">${m.isSme?'SME':'Member'}</span></div><span style="font-size:10px;color:#c0c9d4;margin-left:auto" title="Click to view tasks">↗</span></div>
         <div class="metrics4" style="grid-template-columns:repeat(3,1fr)">
-          <div class="met met-total"><div class="met-num">${m.totalAll??m.total}</div><div class="met-lbl">Total</div></div>
-          <div class="met met-ov"><div class="met-num">${m.overdue}</div><div class="met-lbl">Overdue</div></div>
-          <div class="met" style="background:#0a1f12"><div class="met-num" style="color:#34D399">${m.completedAll??'…'}</div><div class="met-lbl">Completed</div></div>
+          <div class="met met-total"><div class="met-num">${totalDisp}</div><div class="met-lbl">${totalLbl}</div></div>
+          <div class="met met-ov"><div class="met-num">${overdueDisp}</div><div class="met-lbl">${overdLbl}</div></div>
+          <div class="met" style="background:#0a1f12"><div class="met-num" style="color:#34D399">${completedDisp}</div><div class="met-lbl">Completed</div></div>
         </div>
         <div class="bar-lbl">Section breakdown</div>
         ${segbarHtml(m.sections)}
@@ -1094,16 +1153,30 @@ function renderMembers(){
       </div>`;
     }).join(''):'<div style="grid-column:1/-1;padding:40px;text-align:center;color:#9ba8b8;font-size:13px">No members match filters</div>';
   } else {
+    // Update table headers to reflect month context
+    const selM=list[0]?._monthSelected||'';
+    const loaded=list[0]?._boardLoaded||false;
+    const thTot=document.getElementById('th-total');
+    const thOv=document.getElementById('th-overdue');
+    const thCo=document.getElementById('th-completed');
+    if(thTot)thTot.textContent=selM?'Assigned ↕':'Total (All-time) ↕';
+    if(thOv)thOv.textContent=selM?'Past Due ↕':'Overdue ↕';
+    if(thCo)thCo.textContent='Completed ↕';
+
     const body=document.getElementById('memberTableBody');
     body.innerHTML=list.map(m=>{
       const color=avColor(m.name);
       const topSec=Object.entries(m.sections).sort((a,b)=>b[1]-a[1])[0];
       const topHtml=topSec?`<span style="font-size:10px;padding:2px 7px;border-radius:4px;background:${SEC_COLORS[topSec[0]]||'#f0f2f5'}22;color:${SEC_COLORS[topSec[0]]||'#6b7c93'};font-weight:600">${esc(topSec[0])} (${topSec[1]})</span>`:'—';
+      const sel=m._monthSelected;const bl=m._boardLoaded;
+      const tDisp=sel?(bl?m.totalM:'…'):(m.totalAll??m.total);
+      const oDisp=sel?(bl?m.overdueM:'…'):m.overdue;
+      const cDisp=sel?(bl?m.completedM:'…'):(m.completedAll??'…');
       return`<tr class="${m.isSme?'trow-sme':'trow-mem'}">
         <td><div class="tname"><div class="tav" style="background:${color}">${inits(m.name)}</div>${esc(m.name)}${m.isSme?'<span style="font-size:9px;background:#1C1500;color:#F59E0B;padding:1px 5px;border-radius:3px;font-weight:700;margin-left:4px">SME</span>':''}</div></td>
-        <td><span class="num-tot">${m.totalAll??m.total}</span></td>
-        <td><span class="${m.overdue>0?'num-ov':''}">${m.overdue||'—'}</span></td>
-        <td><span class="num-done">${m.completedAll??'…'}</span></td>
+        <td><span class="num-tot">${tDisp}</span></td>
+        <td><span class="${(!sel&&m.overdue>0)||(sel&&bl&&m.overdueM>0)?'num-ov':''}">${oDisp||'—'}</span></td>
+        <td><span class="num-done">${cDisp}</span></td>
         <td>${m.noDue||'—'}</td>
         <td>${topHtml}</td>
       </tr>`;
@@ -1406,6 +1479,8 @@ async function init(){
     window._activeTasks=activeTasks;
     document.getElementById('loadBar').style.width='90%';
     document.getElementById('loadSub').textContent='Building dashboard…';
+
+    populateMonthFilter();
 
     const stats=buildMemberStats(activeTasks);
     window._memberStats=stats;
