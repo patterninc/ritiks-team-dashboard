@@ -2515,4 +2515,18 @@ function getMemberReview(name){
   if(overdueRate===0&&s.total<=teamAvgTotal){badge='Excellent';badgeClass='badge-great';}
   else if(overdueRate<0.2&&s.total<=teamAvgTotal*1.5){badge='On Track';badgeClass='badge-good';}
   else if(overdueRate>=0.4||s.overdue>=5){badge='Needs Attention';badgeClass='badge-watch';}
-  else{badge
+  else{badge='Moderate Load';badgeClass='badge-good';}
+
+  // Build bullets
+  const bullets=[];
+  bullets.push(`<b>Open tasks:</b> ${s.total} (team avg: ${teamAvgTotal})`);
+  bullets.push(`<b>Overdue:</b> ${s.overdue} task${s.overdue!==1?'s':''} (team avg: ${teamAvgOverdue})`);
+  bullets.push(`<b>Due this week:</b> ${s.week}`);
+  bullets.push(`<b>Avg task age:</b> ${avgDays} days open`);
+  if(s.noDue>0) bullets.push(`<b>No due date:</b> ${s.noDue} task${s.noDue!==1?'s':''} — consider adding deadlines`);
+
+  // Insight
+  let insight='';
+  if(s.overdue===0&&s.total>0) insight='✅ No overdue tasks — great discipline on deadlines.';
+  else if(overdueRate>=0.5) insight='🔴 More than half of tasks are overdue — may need reprioritisation or support.';
+  else if(overdu
