@@ -430,18 +430,18 @@ tbody td{padding:8px 13px;font-size:12px;}
 
       <!-- Unassigned tasks list -->
       <div class="panel">
-        <div class="ph">
+        <div class="ph" onclick="openStatModal('unassigned')" style="cursor:pointer;" title="Click to see full list">
           <div class="ph-title">❗ Unassigned Tasks</div>
-          <span class="ph-badge" id="unassigned-badge">0</span>
+          <div class="ph-right"><span class="ph-badge" id="unassigned-badge">0</span><span style="font-size:11px;color:#6B7280;margin-left:6px;">↗</span></div>
         </div>
         <div id="unassignedList" style="max-height:200px;overflow-y:auto;padding:8px 14px;display:flex;flex-direction:column;gap:5px;"></div>
       </div>
 
       <!-- Escalation watch -->
       <div class="panel">
-        <div class="ph">
+        <div class="ph" onclick="openStatModal('escalation')" style="cursor:pointer;" title="Click to see full list">
           <div class="ph-title">🚨 Escalation & Review Queue</div>
-          <span class="ph-badge" id="escal-badge">0</span>
+          <div class="ph-right"><span class="ph-badge" id="escal-badge">0</span><span style="font-size:11px;color:#6B7280;margin-left:6px;">↗</span></div>
         </div>
         <div id="escalList" style="max-height:200px;overflow-y:auto;padding:8px 14px;display:flex;flex-direction:column;gap:5px;"></div>
       </div>
@@ -1928,8 +1928,12 @@ function openStatModal(type){
     filtered=active.filter(t=>t.due_on&&t.due_on>=todaySt&&t.due_on<=weekSt);
     title='Due This Week';subtitle=filtered.length+' tasks due this week';color='#10b981';
   }else if(type==='unassigned'){
-    filtered=active.filter(t=>!t.assignee);
-    title='Unassigned Tasks';subtitle=filtered.length+' tasks without owner';color='#8b5cf6';
+    filtered=active.filter(t=>!t.assignee||!TEAM_SET.has(t.assignee.name));
+    title='Unassigned Tasks';subtitle=filtered.length+' tasks without a team owner';color='#8b5cf6';
+  }else if(type==='escalation'){
+    const escalSecs=['Needs Review from SEM/EPM','Cases Escalation','Account Health Approval (Waiting)','Account Health Approval'];
+    filtered=active.filter(t=>escalSecs.includes(getSection(t)));
+    title='Escalation & Review Queue';subtitle=filtered.length+' tasks awaiting action';color='#dc2626';
   }else{
     filtered=active;
     title='All Active Tasks';subtitle=filtered.length+' total active tasks';color='#2563EB';
@@ -1961,6 +1965,26 @@ function openStatModal(type){
       for(const t of tasks){bodyHtml+=`<a href="${taskUrl(t)}" target="_blank" style="display:block;padding:5px 2px;font-size:12px;color:#F9FAFB;text-decoration:none;border-bottom:1px solid #1E2A3A" onmouseover="this.style.background='#131f35'" onmouseout="this.style.background=''">${esc(t.name.length>70?t.name.slice(0,70)+'…':t.name)}</a>`;}
       bodyHtml+='</div>';
     }
+  }else if(type==='escalation'){
+    const bySec={};
+    for(const t of filtered){const s=getSection(t)||'Other';if(!bySec[s])bySec[s]=[];bySec[s].push(t);}
+    const escalOrder=['Cases Escalation','Needs Review from SEM/EPM','Account Health Approval (Waiting)','Account Health Approval'];
+    const secKeys=[...escalOrder.filter(s=>bySec[s]),...Object.keys(bySec).filter(s=>!escalOrder.includes(s))];
+    for(const sec of secKeys){
+      const tasks=bySec[sec];if(!tasks)continue;
+      const secColor={'Cases Escalation':'#dc2626','Needs Review from SEM/EPM':'#ec4899','Account Health Approval (Waiting)':'#eab308','Account Health Approval':'#eab308'}[sec]||'#6B7280';
+      bodyHtml+=`<div style="margin-bottom:14px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;padding:4px 0;border-bottom:1px solid #1E2A3A;margin-bottom:6px;color:${secColor}">${esc(sec)} · ${tasks.length}</div>`;
+      for(const t of tasks){
+        const an=t.assignee?.name||'Unassigned';
+        const due=t.due_on;const overdue=due&&due<todaySt;
+        bodyHtml+=`<div style="display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid #1E2A3A;border-radius:3px;cursor:pointer" onmouseover="this.style.background='#131f35'" onmouseout="this.style.background=''">
+          <a href="${taskUrl(t)}" target="_blank" style="flex:1;font-size:12px;color:#F9FAFB;text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${esc(t.name)}">${esc(t.name.length>55?t.name.slice(0,55)+'…':t.name)}</a>
+          <span style="font-size:10px;color:#9CA3AF;white-space:nowrap;flex-shrink:0">${esc(an.split(' ')[0])}</span>
+          ${due?`<span style="font-size:10px;font-weight:700;white-space:nowrap;flex-shrink:0;padding:1px 6px;border-radius:3px;${overdue?'background:#1f0a0a;color:#ef4444':'background:#1E2A3A;color:#9CA3AF'}">${due}</span>`:''}
+        </div>`;
+      }
+      bodyHtml+='</div>';
+    }
   }else{
     const byMember={};
     for(const t of filtered){const n=(t.assignee?.name)||'Unassigned';if(!byMember[n])byMember[n]=[];byMember[n].push(t);}
@@ -1979,7 +2003,7 @@ function openStatModal(type){
   }
   window._modalTasks=filtered;
   window._modalTitle=title;
-  const icoMap={overdue:'🔴',today:'🟡',week:'🟢',unassigned:'🔵',all:'📋'};
+  const icoMap={overdue:'🔴',today:'🟡',week:'🟢',unassigned:'🔵',escalation:'🚨',all:'📋'};
   const av=document.getElementById('modal-av');
   av.textContent=icoMap[type]||'📋';av.style.background='transparent';av.style.fontSize='22px';
   document.getElementById('modal-name').textContent=title;
