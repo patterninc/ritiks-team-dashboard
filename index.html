@@ -1365,47 +1365,51 @@ function renderFlowChart(){
   if(loadEl)loadEl.style.display='none';
   if(wrapEl)wrapEl.style.display='block';
 
-  const today=todayStr();
+  // All dates displayed and bucketed in IST (UTC+5:30)
+  const IST=330*60000;
+  const todayIST=new Date(Date.now()+IST).toISOString().slice(0,10);
+  function toISTDate(s){if(!s)return null;return new Date(new Date(s).getTime()+IST).toISOString().slice(0,10);}
+  function toISTMonth(s){if(!s)return null;return toISTDate(s).slice(0,7);}
+
   let buckets=[],labels=[];
 
   if(_flowLevel==='monthly'){
-    let d=new Date(2026,3,1);
-    const td=new Date(today+'T00:00:00');
-    const endM=new Date(td.getFullYear(),td.getMonth(),1);
+    let d=new Date(Date.UTC(2026,3,1));
+    const [ey,em]=todayIST.split('-').map(Number);
+    const endM=new Date(Date.UTC(ey,em-1,1));
     while(d<=endM){
-      buckets.push(d.getFullYear()+'-'+(d.getMonth()+1).toString().padStart(2,'0'));
-      labels.push(_MN[d.getMonth()]+' '+d.getFullYear());
-      d.setMonth(d.getMonth()+1);
+      const yr=d.getUTCFullYear(),mo=d.getUTCMonth();
+      buckets.push(yr+'-'+(mo+1).toString().padStart(2,'0'));
+      labels.push(_MN[mo]+' '+yr);
+      d.setUTCMonth(mo+1);
     }
   } else {
-    // Daily — all days of selected month, capped at today
-    // If selected month is current month, show last 30 days instead
+    // Daily — IST dates for selected month, or last 30 IST days for current month
     const [y,m]=_flowSelMonth.split('-').map(Number);
-    const curYear=new Date(today+'T00:00:00').getFullYear();
-    const curMonth=new Date(today+'T00:00:00').getMonth()+1;
+    const [curYear,curMonth]=todayIST.split('-').map(Number);
     let startD, endD;
     if(y===curYear&&m===curMonth){
-      // Last 30 days — use UTC to match Asana's UTC timestamps
-      endD=new Date(today+'T00:00:00Z');
+      endD=new Date(todayIST+'T00:00:00Z');
       startD=new Date(endD);startD.setUTCDate(startD.getUTCDate()-29);
     } else {
       startD=new Date(Date.UTC(y,m-1,1));
-      endD=new Date(Date.UTC(y,m,0)); // last day of month (UTC)
+      endD=new Date(Date.UTC(y,m,0));
     }
     let d=new Date(startD);
     while(d<=endD){
-      buckets.push(d.toISOString().slice(0,10));
-      labels.push(_MN[d.getUTCMonth()]+' '+d.getUTCDate());
+      const ds=d.toISOString().slice(0,10);
+      const [,bm,bd]=ds.split('-').map(Number);
+      buckets.push(ds);
+      labels.push(_MN[bm-1]+' '+bd);
       d.setUTCDate(d.getUTCDate()+1);
     }
   }
 
   const intakeMap={},compMap={};
   for(const b of buckets){intakeMap[b]=0;compMap[b]=0;}
-  function getKey(ds){if(!ds)return null;return _flowLevel==='monthly'?ds.slice(0,7):ds.slice(0,10);}
   for(const t of allBoard){
-    if(t.created_at){const k=getKey(t.created_at.slice(0,10));if(k&&intakeMap[k]!==undefined)intakeMap[k]++;}
-    if(t.completed&&t.completed_at){const k=getKey(t.completed_at.slice(0,10));if(k&&compMap[k]!==undefined)compMap[k]++;}
+    if(t.created_at){const k=_flowLevel==='monthly'?toISTMonth(t.created_at):toISTDate(t.created_at);if(k&&intakeMap[k]!==undefined)intakeMap[k]++;}
+    if(t.completed&&t.completed_at){const k=_flowLevel==='monthly'?toISTMonth(t.completed_at):toISTDate(t.completed_at);if(k&&compMap[k]!==undefined)compMap[k]++;}
   }
 
   const intakeData=buckets.map(b=>intakeMap[b]);
@@ -1420,9 +1424,8 @@ function renderFlowChart(){
       bcEl.textContent='All Months';
     } else {
       const [y,m]=_flowSelMonth.split('-').map(Number);
-      const curYear=new Date(today+'T00:00:00').getFullYear();
-      const curMonth=new Date(today+'T00:00:00').getMonth()+1;
-      const label=(y===curYear&&m===curMonth)?'Last 30 days':_MN[m-1]+' '+y;
+      const [curYear,curMonth]=todayIST.split('-').map(Number);
+      const label=(y===curYear&&m===curMonth)?'Last 30 days (IST)':_MN[m-1]+' '+y;
       bcEl.innerHTML='<span style="cursor:pointer;color:#60A5FA;text-decoration:underline" onclick="flowDrillUp()">All Months</span> › '+label;
     }
   }
