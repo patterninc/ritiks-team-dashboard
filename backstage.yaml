@@ -1,0 +1,16 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: ritiks-team-dashboard
+  description: 'Copy of Main Dashboard'
+  annotations:
+    repo: patterninc/ritiks-team-dashboard
+  labels:
+    CostCenter: INFRA
+    Environment: test
+    Name: ritiks-team-dashboard
+    Owner: dev
+    Department: INFRA
+    CreatedBy: Backstage
+spec:
+  type: service
